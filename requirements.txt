@@ -1,0 +1,26 @@
+# Web Framework
+fastapi==0.111.0
+uvicorn[standard]==0.29.0
+python-multipart==0.0.9
+
+# AI / ML
+ultralytics==8.2.0
+opencv-python==4.9.0.80
+numpy==1.26.4
+
+# LLM Clients
+anthropic==0.28.0
+openai==1.30.0
+google-generativeai==0.5.4
+
+# Database
+sqlalchemy==2.0.30
+aiosqlite==0.20.0
+
+# Utils
+python-dotenv==1.0.1
+pydantic==2.7.1
+pydantic-settings==2.2.1
+
+# TTS (future)
+# gTTS==2.5.1
