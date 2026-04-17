@@ -7,6 +7,7 @@ YOLOv8-pose 로 17개 관절 좌표를 추출한다.
 반환 형식: [[x, y, confidence], ...] 17개
 """
 
+import math
 import cv2
 import numpy as np
 from pathlib import Path
@@ -187,3 +188,209 @@ def _pick_main_person(result) -> int:
             max_idx = i
 
     return max_idx
+
+
+# ──────────────────────────────────────────────
+# 팝업 3단계 자동 감지 (body metrics 기반)
+# ──────────────────────────────────────────────
+
+def extract_popup_stage_frames(
+    video_path: str,
+) -> dict[int, tuple[list, np.ndarray]]:
+    """
+    영상에서 팝업 3단계 대표 프레임을 body metrics로 자동 감지
+
+    판별 기준:
+      Stage 1 (Push)  : 앞 절반 중 shoulder_y 최대 → 가장 낮은 자세(엎드려 밀어올리는 순간)
+      Stage 2 (Squat) : 전체 중 knee_angle 최소  → 무릎이 가장 많이 굽혀진 순간
+      Stage 3 (Stand) : 뒤 절반 중 shoulder_y 최소 → 가장 일어선 자세
+
+    Returns:
+        {1: (kps_17, frame), 2: (kps_17, frame), 3: (kps_17, frame)}
+        kps_17: [[x, y, conf], ...] 17개
+    """
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        raise ValueError(f"영상을 열 수 없습니다: {video_path}")
+
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    model = _get_model()
+
+    # ── Phase 1: 전체 영상 스캔 (25프레임) → shoulder_y 궤적 ──
+    scan_count = min(25, total_frames)
+    scan_data = []
+    for i in range(scan_count):
+        frame_idx = int(total_frames * i / scan_count)
+        d = _get_frame_data(cap, model, frame_idx)
+        if d:
+            scan_data.append(d)
+
+    if len(scan_data) < 3:
+        cap.release()
+        raise ValueError(
+            "영상에서 사람을 감지하지 못했습니다. 서퍼가 잘 보이는 영상을 사용해주세요."
+        )
+
+    # ── Phase 2: 팝업 구간 감지 ──
+    shoulder_series = [
+        (d["frame_idx"], d["shoulder_y"])
+        for d in scan_data
+        if d["shoulder_y"] < float("inf")
+    ]
+    popup_start, popup_end = _find_popup_window(shoulder_series, total_frames)
+
+    # ── Phase 3: 팝업 구간 밀집 스캔 (15프레임) ──
+    span = max(1, popup_end - popup_start)
+    dense_count = min(15, span)
+    dense_indices = sorted(set([
+        int(popup_start + span * i / max(dense_count - 1, 1))
+        for i in range(dense_count)
+    ]))
+
+    dense_data = []
+    for frame_idx in dense_indices:
+        d = _get_frame_data(cap, model, frame_idx)
+        if d:
+            dense_data.append(d)
+
+    cap.release()
+
+    # 밀집 스캔 실패 시 전체 스캔 결과로 대체
+    if len(dense_data) < 3:
+        dense_data = scan_data
+
+    # ── Phase 4: 단계별 대표 프레임 선정 ──
+    n = len(dense_data)
+
+    # Stage 1: 앞 절반에서 shoulder_y 가장 큰 프레임 (가장 낮은 자세)
+    first_half = dense_data[: max(1, int(n * 0.5))]
+    stage1 = max(first_half, key=lambda d: d["shoulder_y"] if d["shoulder_y"] < float("inf") else 0)
+
+    # Stage 2: 전체에서 knee_angle 가장 작은 프레임 (가장 쭈그린 자세)
+    stage2 = min(dense_data, key=lambda d: d["knee_angle"])
+
+    # Stage 3: 뒤 절반에서 shoulder_y 가장 작은 프레임 (가장 일어선 자세)
+    second_half = dense_data[max(0, int(n * 0.5)):]
+    stage3 = min(
+        second_half,
+        key=lambda d: d["shoulder_y"] if d["shoulder_y"] < float("inf") else 9999,
+    )
+
+    return {
+        1: (stage1["kps"], stage1["frame"]),
+        2: (stage2["kps"], stage2["frame"]),
+        3: (stage3["kps"], stage3["frame"]),
+    }
+
+
+def _get_frame_data(cap, model, frame_idx: int) -> dict | None:
+    """단일 프레임에서 키포인트 + 분류용 메트릭 추출"""
+    cap.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+    ret, frame = cap.read()
+    if not ret:
+        return None
+
+    results = model(frame, verbose=False)
+    if not results or results[0].keypoints is None:
+        return None
+
+    kps_data = results[0].keypoints
+    if kps_data.xy is None or len(kps_data.xy) == 0:
+        return None
+
+    person_idx = _pick_main_person(results[0])
+    if person_idx < 0:
+        return None
+
+    xy = kps_data.xy[person_idx].cpu().numpy()
+    conf = kps_data.conf[person_idx].cpu().numpy()
+
+    kps = [[float(xy[i][0]), float(xy[i][1]), float(conf[i])] for i in range(17)]
+
+    # shoulder_y: 낮을수록 화면 위 = 일어선 상태
+    sh_ys = [float(xy[j][1]) for j in [5, 6] if conf[j] > 0.3]
+    shoulder_y = sum(sh_ys) / len(sh_ys) if sh_ys else float("inf")
+
+    # knee_angle: 낮을수록 더 쭈그린 자세
+    knee_angle = _compute_knee_angle(xy, conf)
+
+    return {
+        "frame_idx": frame_idx,
+        "kps": kps,
+        "frame": frame.copy(),
+        "shoulder_y": shoulder_y,
+        "knee_angle": knee_angle,
+    }
+
+
+def _compute_knee_angle(xy: np.ndarray, conf: np.ndarray) -> float:
+    """무릎 각도 계산 (hip-knee-ankle 기준)"""
+
+    def _angle3(a, b, c):
+        ba = a - b
+        bc = c - b
+        cos_a = np.dot(ba, bc) / (np.linalg.norm(ba) * np.linalg.norm(bc) + 1e-6)
+        return math.degrees(math.acos(float(np.clip(cos_a, -1.0, 1.0))))
+
+    angles = []
+    # 왼쪽: hip(11)-knee(13)-ankle(15)
+    if conf[11] > 0.3 and conf[13] > 0.3 and conf[15] > 0.3:
+        angles.append(_angle3(xy[11], xy[13], xy[15]))
+    # 오른쪽: hip(12)-knee(14)-ankle(16)
+    if conf[12] > 0.3 and conf[14] > 0.3 and conf[16] > 0.3:
+        angles.append(_angle3(xy[12], xy[14], xy[16]))
+
+    return sum(angles) / len(angles) if angles else 180.0
+
+
+def _find_popup_window(
+    shoulder_series: list[tuple[int, float]],
+    total_frames: int,
+) -> tuple[int, int]:
+    """
+    어깨 y좌표 시계열에서 팝업 구간 감지
+
+    팝업 = shoulder_y가 크게 감소하는 구간 (사람이 일어나는 중)
+    stance 영상 = shoulder_y가 전체적으로 낮고 안정적 (이미 서 있음)
+
+    Args:
+        shoulder_series: [(frame_idx, shoulder_y), ...]
+    Returns:
+        (start_frame, end_frame)
+    """
+    if len(shoulder_series) < 3:
+        return 0, total_frames - 1
+
+    ys = [y for _, y in shoulder_series]
+    total_variation = max(ys) - min(ys)
+
+    # 변화량이 거의 없으면 전체 영상 사용
+    if total_variation < 30:
+        return shoulder_series[0][0], shoulder_series[-1][0]
+
+    best_score = 0.0
+    best_start = shoulder_series[0][0]
+    best_end = shoulder_series[-1][0]
+
+    for i in range(len(shoulder_series)):
+        for j in range(i + 2, len(shoulder_series)):
+            drop = shoulder_series[i][1] - shoulder_series[j][1]  # y 감소 = 올라감
+            if drop < 20:  # 최소 20px 이상 하강해야 팝업으로 인정
+                continue
+
+            span_frames = shoulder_series[j][0] - shoulder_series[i][0]
+            span_ratio = span_frames / total_frames
+
+            # 너무 짧거나 너무 긴 구간 제외
+            if span_ratio < 0.05 or span_ratio > 0.85:
+                continue
+
+            # 점수: 하강량이 크고 적당한 길이(30~50%)를 선호
+            score = drop * (1.0 - abs(span_ratio - 0.35))
+
+            if score > best_score:
+                best_score = score
+                best_start = shoulder_series[i][0]
+                best_end = shoulder_series[j][0]
+
+    return best_start, best_end

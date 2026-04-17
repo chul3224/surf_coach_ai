@@ -315,6 +315,42 @@ def analyze_standup_stage(kps: list[KeyPoint]) -> PopupStageResult:
 # 통합 — 프레임 리스트로 3단계 자동 감지
 # ──────────────────────────────────────────────
 
+def analyze_popup_from_stage_frames(
+    stage_frames: dict,
+) -> PopupFullResult:
+    """
+    3단계 대표 프레임의 키포인트로 팝업 전체 분석
+
+    Args:
+        stage_frames: {1: kps_list, 2: kps_list, 3: kps_list}
+                      kps_list = [[x, y, conf], ...] 17개
+    Returns:
+        PopupFullResult
+    """
+    def _to_kp(raw):
+        return [KeyPoint(x=p[0], y=p[1], confidence=p[2]) for p in raw]
+
+    stage1 = analyze_push_stage(_to_kp(stage_frames[1]))
+    stage2 = analyze_squat_stage(_to_kp(stage_frames[2]))
+    stage3 = analyze_standup_stage(_to_kp(stage_frames[3]))
+
+    all_issues = stage1.issues + stage2.issues + stage3.issues
+    overall = round(
+        (stage1.overall_score + stage2.overall_score + stage3.overall_score) / 3, 1
+    )
+    scores_summary = {
+        "1단계_푸쉬_점수": stage1.overall_score,
+        "2단계_발끌어오기_점수": stage2.overall_score,
+        "3단계_일어서기_점수": stage3.overall_score,
+    }
+    return PopupFullResult(
+        stages=[stage1, stage2, stage3],
+        scores=scores_summary,
+        issues=all_issues,
+        overall_score=overall,
+    )
+
+
 def analyze_popup_stages(frames_keypoints: list[list]) -> PopupFullResult:
     """
     여러 프레임의 키포인트를 받아 3단계를 자동으로 감지하고 분석
