@@ -16,7 +16,7 @@ class AnalysisRecord(Base):
 
     # 영상 정보
     video_filename = Column(String(255), nullable=False)
-    action = Column(String(50), nullable=False)  # popup / stance / paddling
+    action = Column(String(50), nullable=False)  # takeoff / stance / paddling
 
     # 분석 결과
     overall_score = Column(Float, nullable=False)

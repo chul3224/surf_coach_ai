@@ -1,5 +1,5 @@
 """
-팝업(Pop-up) 3단계 세부 분석 모듈
+테이크오프(Take-off) 3단계 세부 분석 모듈
 
 강사 도메인 지식 기반 체크포인트:
 
@@ -25,8 +25,8 @@ from .pose_analyzer import KeyPoint, AnalysisResult, _angle, _distance, _visible
 
 
 @dataclass
-class PopupStageResult:
-    """팝업 3단계 각각의 분석 결과"""
+class TakeoffStageResult:
+    """테이크오프 3단계 각각의 분석 결과"""
     stage: int          # 1 / 2 / 3
     stage_name: str
     scores: dict = field(default_factory=dict)
@@ -35,9 +35,9 @@ class PopupStageResult:
 
 
 @dataclass
-class PopupFullResult:
-    """팝업 전체 분석 결과 (3단계 합산)"""
-    action: str = "팝업(Pop-up) 3단계 분석"
+class TakeoffFullResult:
+    """테이크오프 전체 분석 결과 (3단계 합산)"""
+    action: str = "테이크오프(Take-off) 3단계 분석"
     stages: list = field(default_factory=list)   # PopupStageResult 3개
     scores: dict = field(default_factory=dict)   # 단계별 점수 요약
     issues: list = field(default_factory=list)   # 전체 문제점
@@ -150,7 +150,7 @@ def analyze_push_stage(kps: list[KeyPoint]) -> PopupStageResult:
       → 팔을 구부리면 중심이 불안정해짐
     - 체중이 뒤로 이동 (상체가 뒤로 기울어지는지)
     """
-    result = PopupStageResult(stage=1, stage_name="푸쉬(Push)")
+    result = TakeoffStageResult(stage=1, stage_name="푸쉬(Push)")
     scores = {}
     issues = []
 
@@ -206,7 +206,7 @@ def analyze_squat_stage(kps: list[KeyPoint]) -> PopupStageResult:
     - 시선이 아래(바닥)를 보면 안 됨 ← 핵심!
     - 엉덩이 높이가 낮아진 상태
     """
-    result = PopupStageResult(stage=2, stage_name="발 끌어오기(Pull & Squat)")
+    result = TakeoffStageResult(stage=2, stage_name="발 끌어오기(Pull & Squat)")
     scores = {}
     issues = []
 
@@ -263,7 +263,7 @@ def analyze_standup_stage(kps: list[KeyPoint]) -> PopupStageResult:
     - 무릎 각도 90~120도 (안정적 라이딩 자세)
     - 상체가 너무 앞으로 숙여지지 않는지
     """
-    result = PopupStageResult(stage=3, stage_name="일어서기(Stand Up)")
+    result = TakeoffStageResult(stage=3, stage_name="일어서기(Stand Up)")
     scores = {}
     issues = []
 
@@ -315,11 +315,11 @@ def analyze_standup_stage(kps: list[KeyPoint]) -> PopupStageResult:
 # 통합 — 프레임 리스트로 3단계 자동 감지
 # ──────────────────────────────────────────────
 
-def analyze_popup_from_stage_frames(
+def analyze_takeoff_from_stage_frames(
     stage_frames: dict,
-) -> PopupFullResult:
+) -> TakeoffFullResult:
     """
-    3단계 대표 프레임의 키포인트로 팝업 전체 분석
+    3단계 대표 프레임의 키포인트로 테이크오프 전체 분석
 
     Args:
         stage_frames: {1: kps_list, 2: kps_list, 3: kps_list}
@@ -343,7 +343,7 @@ def analyze_popup_from_stage_frames(
         "2단계_발끌어오기_점수": stage2.overall_score,
         "3단계_일어서기_점수": stage3.overall_score,
     }
-    return PopupFullResult(
+    return TakeoffFullResult(
         stages=[stage1, stage2, stage3],
         scores=scores_summary,
         issues=all_issues,
@@ -351,7 +351,7 @@ def analyze_popup_from_stage_frames(
     )
 
 
-def analyze_popup_stages(frames_keypoints: list[list]) -> PopupFullResult:
+def analyze_takeoff_stages(frames_keypoints: list[list]) -> TakeoffFullResult:
     """
     여러 프레임의 키포인트를 받아 3단계를 자동으로 감지하고 분석
 
@@ -394,7 +394,7 @@ def analyze_popup_stages(frames_keypoints: list[list]) -> PopupFullResult:
         "3단계_일어서기_점수": stage3.overall_score,
     }
 
-    return PopupFullResult(
+    return TakeoffFullResult(
         stages=[stage1, stage2, stage3],
         scores=scores_summary,
         issues=all_issues,

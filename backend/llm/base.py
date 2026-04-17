@@ -5,7 +5,7 @@ from dataclasses import dataclass
 @dataclass
 class PoseData:
     """YOLO 분석 결과 → LLM 입력 구조"""
-    action: str           # "popup" | "stance" | "paddling"
+    action: str           # "takeoff" | "stance" | "paddling"
     scores: dict          # {"knee_angle": 145, "foot_gap_ratio": 1.8, ...}
     issues: list[str]     # ["시선이 아래를 향하고 있음", "무릎 각도 과도"]
     overall_score: float  # 0~100

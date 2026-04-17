@@ -50,9 +50,9 @@ def extract_multi_keypoints_from_video(
     """
     영상에서 팝업 동작 구간을 감지하여 여러 프레임의 키포인트 반환
 
-    팝업 감지 전략:
+    테이크오프 감지 전략:
     - 어깨 y좌표가 급격히 올라가는(숫자가 작아지는) 구간 = 일어나는 중
-    - 전체 영상에서 어깨 높이 변화가 가장 큰 구간을 팝업으로 판단
+    - 전체 영상에서 어깨 높이 변화가 가장 큰 구간을 테이크오프로 판단
     - 해당 구간을 3등분하여 각 단계 프레임 추출
 
     Returns:
@@ -108,10 +108,10 @@ def extract_multi_keypoints_from_video(
         else:
             shoulder_heights.append((idx, None))
 
-    # 2단계: 어깨가 가장 크게 올라가는 구간 찾기 (팝업 구간)
+    # 2단계: 어깨가 가장 크게 올라가는 구간 찾기 (테이크오프 구간)
     valid = [(i, h) for i, (_, h) in enumerate(shoulder_heights) if h is not None]
-    popup_start_scan = 0
-    popup_end_scan = len(shoulder_heights) - 1
+    takeoff_start_scan = 0
+    takeoff_end_scan = len(shoulder_heights) - 1
 
     if len(valid) >= 3:
         max_drop = 0
@@ -119,21 +119,21 @@ def extract_multi_keypoints_from_video(
             drop = valid[k][1] - valid[k + 2][1]  # y가 줄어드는 것 = 올라가는 것
             if drop > max_drop:
                 max_drop = drop
-                popup_start_scan = valid[k][0]
-                popup_end_scan = valid[min(k + 2, len(valid) - 1)][0]
+                takeoff_start_scan = valid[k][0]
+                takeoff_end_scan = valid[min(k + 2, len(valid) - 1)][0]
 
-    popup_start_frame = shoulder_heights[popup_start_scan][0]
-    popup_end_frame = shoulder_heights[popup_end_scan][0]
+    takeoff_start_frame = shoulder_heights[takeoff_start_scan][0]
+    takeoff_end_frame = shoulder_heights[takeoff_end_scan][0]
 
-    # 팝업 구간이 너무 짧으면 전체 영상 사용
-    if popup_end_frame - popup_start_frame < total_frames * 0.1:
-        popup_start_frame = 0
-        popup_end_frame = total_frames - 1
+    # 테이크오프 구간이 너무 짧으면 전체 영상 사용
+    if takeoff_end_frame - takeoff_start_frame < total_frames * 0.1:
+        takeoff_start_frame = 0
+        takeoff_end_frame = total_frames - 1
 
-    # 3단계: 팝업 구간을 num_samples 개로 균등 샘플링
-    span = popup_end_frame - popup_start_frame
+    # 3단계: 테이크오프 구간을 num_samples 개로 균등 샘플링
+    span = takeoff_end_frame - takeoff_start_frame
     sample_indices = sorted(set([
-        max(0, int(popup_start_frame + span * i / max(num_samples - 1, 1)))
+        max(0, int(takeoff_start_frame + span * i / max(num_samples - 1, 1)))
         for i in range(num_samples)
     ]))
 
@@ -194,11 +194,11 @@ def _pick_main_person(result) -> int:
 # 팝업 3단계 자동 감지 (body metrics 기반)
 # ──────────────────────────────────────────────
 
-def extract_popup_stage_frames(
+def extract_takeoff_stage_frames(
     video_path: str,
 ) -> dict[int, tuple[list, np.ndarray]]:
     """
-    영상에서 팝업 3단계 대표 프레임을 body metrics로 자동 감지
+    영상에서 테이크오프 3단계 대표 프레임을 body metrics로 자동 감지
 
     판별 기준:
       Stage 1 (Push)  : 앞 절반 중 shoulder_y 최대 → 가장 낮은 자세(엎드려 밀어올리는 순간)
@@ -231,19 +231,19 @@ def extract_popup_stage_frames(
             "영상에서 사람을 감지하지 못했습니다. 서퍼가 잘 보이는 영상을 사용해주세요."
         )
 
-    # ── Phase 2: 팝업 구간 감지 ──
+    # ── Phase 2: 테이크오프 구간 감지 ──
     shoulder_series = [
         (d["frame_idx"], d["shoulder_y"])
         for d in scan_data
         if d["shoulder_y"] < float("inf")
     ]
-    popup_start, popup_end = _find_popup_window(shoulder_series, total_frames)
+    takeoff_start, takeoff_end = _find_takeoff_window(shoulder_series, total_frames)
 
-    # ── Phase 3: 팝업 구간 밀집 스캔 (15프레임) ──
-    span = max(1, popup_end - popup_start)
+    # ── Phase 3: 테이크오프 구간 밀집 스캔 (15프레임) ──
+    span = max(1, takeoff_end - takeoff_start)
     dense_count = min(15, span)
     dense_indices = sorted(set([
-        int(popup_start + span * i / max(dense_count - 1, 1))
+        int(takeoff_start + span * i / max(dense_count - 1, 1))
         for i in range(dense_count)
     ]))
 
@@ -343,14 +343,14 @@ def _compute_knee_angle(xy: np.ndarray, conf: np.ndarray) -> float:
     return sum(angles) / len(angles) if angles else 180.0
 
 
-def _find_popup_window(
+def _find_takeoff_window(
     shoulder_series: list[tuple[int, float]],
     total_frames: int,
 ) -> tuple[int, int]:
     """
-    어깨 y좌표 시계열에서 팝업 구간 감지
+    어깨 y좌표 시계열에서 테이크오프 구간 감지
 
-    팝업 = shoulder_y가 크게 감소하는 구간 (사람이 일어나는 중)
+    테이크오프 = shoulder_y가 크게 감소하는 구간 (사람이 일어나는 중)
     stance 영상 = shoulder_y가 전체적으로 낮고 안정적 (이미 서 있음)
 
     Args:

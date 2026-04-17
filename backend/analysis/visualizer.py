@@ -38,7 +38,7 @@ KP_NAMES = [
 
 # 동작별로 점수와 연관된 주요 키포인트 매핑
 ACTION_KP_SCORE_MAP = {
-    "popup": {
+    "takeoff": {
         "무릎_점수":    [13, 14],   # 왼무릎, 오른무릎
         "시선_점수":    [0],         # 코
         "손_점수":      [9, 10],     # 손목
@@ -48,9 +48,10 @@ ACTION_KP_SCORE_MAP = {
         "무게중심_점수": [11, 12, 13, 14],
     },
     "paddling": {
-        "몸통_대칭_점수":   [5, 6],  # 어깨
-        "패들링_대칭_점수": [7, 8],  # 팔꿈치
-        "머리_자세_점수":   [0],      # 코
+        "몸통_대칭_점수":   [5, 6],       # 어깨
+        "패들링_대칭_점수": [7, 8],       # 팔꿈치
+        "팔뻗음_점수":      [9, 10],      # 손목
+        "머리_자세_점수":   [0],           # 코
     },
 }
 
@@ -98,7 +99,7 @@ def draw_overlay(
     Args:
         frame: BGR 이미지 (numpy array)
         keypoints: [[x, y, conf], ...] 17개
-        action: "popup" | "stance" | "paddling"
+        action: "takeoff" | "stance" | "paddling"
         scores: 세부 점수 dict
         overall_score: 종합 점수
 
@@ -159,7 +160,7 @@ def _draw_score_panel(img, action: str, overall_score: float, scores: dict):
     cv2.addWeighted(overlay, 0.65, img, 0.35, 0, img)
 
     # 동작명
-    action_kr = {"popup": "팝업", "stance": "스탠스", "paddling": "패들링"}.get(action, action)
+    action_kr = {"takeoff": "테이크오프", "stance": "스탠스", "paddling": "패들링"}.get(action, action)
     cv2.putText(img, f"[{action_kr}]", (panel_x, panel_y + 22),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
 
