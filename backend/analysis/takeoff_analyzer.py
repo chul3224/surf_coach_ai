@@ -38,7 +38,7 @@ class TakeoffStageResult:
 class TakeoffFullResult:
     """테이크오프 전체 분석 결과 (3단계 합산)"""
     action: str = "테이크오프(Take-off) 3단계 분석"
-    stages: list = field(default_factory=list)   # PopupStageResult 3개
+    stages: list = field(default_factory=list)   # TakeoffStageResult 3개
     scores: dict = field(default_factory=dict)   # 단계별 점수 요약
     issues: list = field(default_factory=list)   # 전체 문제점
     overall_score: float = 0.0
@@ -141,7 +141,7 @@ def _hip_height_ratio(kps: list[KeyPoint]) -> float:
 # 1단계: 푸쉬(Push)
 # ──────────────────────────────────────────────
 
-def analyze_push_stage(kps: list[KeyPoint]) -> PopupStageResult:
+def analyze_push_stage(kps: list[KeyPoint]) -> TakeoffStageResult:
     """
     체크포인트:
     - 손목이 갈비뼈 옆(어깨-엉덩이 사이 30~70%)에 위치
@@ -199,7 +199,7 @@ def analyze_push_stage(kps: list[KeyPoint]) -> PopupStageResult:
 # 2단계: 발 끌어오기 & 쭈그리기(Pull & Squat)
 # ──────────────────────────────────────────────
 
-def analyze_squat_stage(kps: list[KeyPoint]) -> PopupStageResult:
+def analyze_squat_stage(kps: list[KeyPoint]) -> TakeoffStageResult:
     """
     체크포인트:
     - 무릎이 당겨지며 무릎 각도 감소 (90~130도 이상적)
@@ -256,7 +256,7 @@ def analyze_squat_stage(kps: list[KeyPoint]) -> PopupStageResult:
 # 3단계: 일어서기(Stand Up)
 # ──────────────────────────────────────────────
 
-def analyze_standup_stage(kps: list[KeyPoint]) -> PopupStageResult:
+def analyze_standup_stage(kps: list[KeyPoint]) -> TakeoffStageResult:
     """
     체크포인트:
     - 일어나는 동안 시선이 파도 방향을 향하는지 ← 핵심!
@@ -325,7 +325,7 @@ def analyze_takeoff_from_stage_frames(
         stage_frames: {1: kps_list, 2: kps_list, 3: kps_list}
                       kps_list = [[x, y, conf], ...] 17개
     Returns:
-        PopupFullResult
+        TakeoffFullResult
     """
     def _to_kp(raw):
         return [KeyPoint(x=p[0], y=p[1], confidence=p[2]) for p in raw]
@@ -361,7 +361,7 @@ def analyze_takeoff_stages(frames_keypoints: list[list]) -> TakeoffFullResult:
                           각 kp는 [[x,y,conf]*17]
 
     Returns:
-        PopupFullResult (3단계 결과 포함)
+        TakeoffFullResult (3단계 결과 포함)
     """
     n = len(frames_keypoints)
     if n == 0:

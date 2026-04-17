@@ -159,9 +159,9 @@ def _draw_score_panel(img, action: str, overall_score: float, scores: dict):
     cv2.rectangle(overlay, (panel_x - 10, panel_y), (w - 5, panel_y + 160), (30, 30, 30), -1)
     cv2.addWeighted(overlay, 0.65, img, 0.35, 0, img)
 
-    # 동작명
-    action_kr = {"takeoff": "테이크오프", "stance": "스탠스", "paddling": "패들링"}.get(action, action)
-    cv2.putText(img, f"[{action_kr}]", (panel_x, panel_y + 22),
+    # 동작명 (OpenCV 기본 폰트는 한글 미지원 → 영문 표기)
+    action_en = {"takeoff": "Take-off", "stance": "Stance", "paddling": "Paddling"}.get(action, action)
+    cv2.putText(img, f"[{action_en}]", (panel_x, panel_y + 22),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1, cv2.LINE_AA)
 
     # 종합 점수

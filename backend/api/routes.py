@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ..analysis import analyze, extract_keypoints_from_video, save_overlay_image
 from ..analysis.yolo_extractor import extract_multi_keypoints_from_video, extract_takeoff_stage_frames
 from ..analysis.takeoff_analyzer import analyze_takeoff_stages, analyze_takeoff_from_stage_frames
+from ..analysis.reference_matcher import match_pose_for_frame_selection
 from ..db import get_db, AnalysisRecord
 from ..llm import get_llm, PoseData
 
@@ -59,7 +60,7 @@ async def analyze_video(
             stage_kps = {s: kps for s, (kps, _) in stage_frames.items()}
             takeoff_result = analyze_takeoff_from_stage_frames(stage_kps)
 
-            # 오버레이: Stage 2(쭈그린 자세) 프레임 사용 — 테이크오프의 핵심 순간
+            # 대표 오버레이: Stage 2(쭈그린 자세) 프레임
             keypoints_raw, frame = stage_frames[2]
 
             # AnalysisResult 호환 구조로 변환
@@ -72,18 +73,48 @@ async def analyze_video(
             }
             analysis_issues = takeoff_result.issues
             analysis_overall = takeoff_result.overall_score
+
+            # 3단계 각각 오버레이 이미지 저장
+            stage_overlay_urls = {}
+            stage_names = {1: "push", 2: "squat", 3: "standup"}
+            for stage_num, (s_kps, s_frame) in stage_frames.items():
+                s_filename = f"{file_id}_stage{stage_num}_{stage_names[stage_num]}.jpg"
+                s_path = str(STATIC_DIR / s_filename)
+                s_scores = {
+                    **{k: v for k, v in analysis_scores.items() if k.startswith(f"{stage_num}단계_")},
+                }
+                save_overlay_image(
+                    frame=s_frame,
+                    keypoints=s_kps,
+                    action=action,
+                    scores=s_scores,
+                    overall_score=takeoff_result.stages[stage_num - 1].overall_score,
+                    save_path=s_path,
+                )
+                stage_overlay_urls[stage_num] = f"/static/results/{s_filename}"
+
             stages_detail = [
                 {
                     "stage": s.stage,
                     "name": s.stage_name,
                     "score": s.overall_score,
                     "issues": s.issues,
+                    "overlay_image_url": stage_overlay_urls.get(s.stage),
                 }
                 for s in takeoff_result.stages
             ]
         else:
-            # stance / paddling: 단일 프레임 분석
-            keypoints_raw, frame = extract_keypoints_from_video(str(video_path))
+            # stance / paddling: 여러 프레임 추출 후 레퍼런스 매칭으로 최적 프레임 선택
+            all_kps, frames = extract_multi_keypoints_from_video(str(video_path), num_samples=9)
+            if not all_kps:
+                raise ValueError("영상에서 사람을 감지하지 못했습니다.")
+
+            # 레퍼런스 DB가 있으면 해당 동작과 가장 유사한 프레임 선택
+            # 없으면 신뢰도 가장 높은 프레임 (기존 방식) 자동 fallback
+            best_idx = match_pose_for_frame_selection(all_kps, target_label=action)
+            keypoints_raw = all_kps[best_idx]
+            frame = frames[best_idx]
+
             result = analyze(action, keypoints_raw)
             analysis_action = result.action
             analysis_scores = result.scores

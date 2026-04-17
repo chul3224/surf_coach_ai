@@ -173,21 +173,54 @@ def extract_multi_keypoints_from_video(
 
 
 def _pick_main_person(result) -> int:
-    """여러 명 감지 시 바운딩박스 면적이 가장 큰 사람 인덱스 반환"""
+    """
+    여러 명 감지 시 주 피사체 선택
+    - 면적과 화면 중앙 근접도를 함께 고려
+    - 중앙에 가깝고 충분히 큰 사람을 우선 선택
+    """
     boxes = result.boxes
     if boxes is None or len(boxes) == 0:
         return -1
 
-    max_area = -1
-    max_idx = 0
+    if len(boxes) == 1:
+        return 0
+
+    # 이미지 크기 추정 (키포인트 좌표 범위로 대략 파악)
+    # boxes.xyxy에서 최대 좌표로 이미지 크기 추정
+    all_coords = boxes.xyxy.cpu().numpy()
+    img_w = float(all_coords[:, 2].max())
+    img_h = float(all_coords[:, 3].max())
+    cx_img = img_w / 2
+    cy_img = img_h / 2
+
+    best_idx = 0
+    best_score = -1.0
+
     for i, box in enumerate(boxes.xyxy):
         x1, y1, x2, y2 = box.cpu().numpy()
         area = (x2 - x1) * (y2 - y1)
-        if area > max_area:
-            max_area = area
-            max_idx = i
+        img_area = img_w * img_h + 1e-6
 
-    return max_idx
+        # 박스 중심점
+        cx = (x1 + x2) / 2
+        cy = (y1 + y2) / 2
+
+        # 화면 중앙과의 거리 (0~1 정규화)
+        dist = ((cx - cx_img) ** 2 + (cy - cy_img) ** 2) ** 0.5
+        max_dist = (cx_img ** 2 + cy_img ** 2) ** 0.5 + 1e-6
+        proximity = 1.0 - (dist / max_dist)  # 1에 가까울수록 중앙
+
+        # 면적 비율 (0~1)
+        area_ratio = area / img_area
+
+        # 종합 점수: 중앙 근접도 60% + 면적 40%
+        score = proximity * 0.6 + area_ratio * 0.4
+
+        if score > best_score:
+            best_score = score
+            best_idx = i
+
+    return best_idx
 
 
 # ──────────────────────────────────────────────

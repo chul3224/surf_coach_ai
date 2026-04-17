@@ -276,6 +276,7 @@ def build_pdf(output_path):
             ["한 줄 정의", "서핑 영상을 업로드하면 AI가 자세를 분석하고\n전문 강사 수준의 피드백을 제공하는 코칭 앱"],
             ["타겟 유저", "입문~중급 서퍼 (독학러, 레슨비 부담층)"],
             ["기획자 배경", "서핑 강사 5년 + 해양 구조대 경력 → 현장 도메인 지식 기반 설계"],
+            ["GitHub", "https://github.com/chul3224/surf_coach_ai"],
         ],
         [50 * mm, W - 2 * MARGIN - 50 * mm],
     ))
@@ -427,8 +428,9 @@ def build_pdf(output_path):
         "백엔드 API 완성 (POST /analyze, GET /history, GET /history/{id})",
         "테이크오프 3단계 분석 운영 중 (Gemini 2.5 Flash 피드백 생성)",
         "서핑 영상 11개에서 프레임 330장 추출 완료 (data/frames/)",
-        "레퍼런스 사진 폴더 구조 준비 완료 (data/reference/)",
-        "다음 단계: 레퍼런스 사진 라벨링 → 포즈 매칭 시스템 구현",
+        "레퍼런스 포즈 매칭 시스템 구현 완료 (reference_matcher.py)",
+        "주 피사체 선택 알고리즘 개선 (중앙 근접도 + 면적 복합 기준)",
+        "서버 테스트 완료 — takeoff / stance / paddling 분석 정상 동작",
     ]
     inner = []
     for item in current:
