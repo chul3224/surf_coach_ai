@@ -1,8 +1,8 @@
 """
-YOLOv8-pose 키포인트 추출기
+YOLO26-pose 키포인트 추출기
 
 업로드된 영상에서 대표 프레임을 뽑고
-YOLOv8-pose 로 17개 관절 좌표를 추출한다.
+YOLO26-pose 로 17개 관절 좌표를 추출한다.
 
 반환 형식: [[x, y, confidence], ...] 17개
 """
@@ -21,7 +21,7 @@ def _get_model() -> YOLO:
     global _model
     if _model is None:
         # 없으면 자동 다운로드 (~7MB)
-        _model = YOLO("yolov8n-pose.pt")
+        _model = YOLO("yolo26s-pose.pt")
     return _model
 
 

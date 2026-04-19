@@ -51,7 +51,7 @@ _model = None
 def _get_model() -> YOLO:
     global _model
     if _model is None:
-        _model = YOLO("yolov8n-pose.pt")
+        _model = YOLO("yolo26s-pose.pt")
     return _model
 
 
